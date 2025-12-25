@@ -116,6 +116,35 @@ app.delete("/post/:email/:id", async (req, res) => {
   }
 });
 
+// 🔹 Edit All Posts of a User (username & avatar)
+app.put("/edituserposts/:email", async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { username, avatar } = req.body;
+
+    if (!username || !avatar) {
+      return res.status(400).json({ message: "Missing username or avatar" });
+    }
+
+    const result = await postsDB.query(
+      "UPDATE posts SET username=$1, avatar=$2 WHERE email=$3 RETURNING *",
+      [username, avatar, email]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "No posts found for this user" });
+    }
+
+    res.json({
+      message: `All posts of ${email} updated`,
+      updatedPosts: result.rows
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update posts" });
+  }
+});
+
 // 🔹 Delete All Posts of a User
 app.delete("/deleteuser/:email", async (req, res) => {
   try {
