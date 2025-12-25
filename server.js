@@ -48,42 +48,23 @@ async function initDB() {
 }
 
 
-// 🔹 Create Post
+
+// 🔹 Create Post  
 app.post("/post", async (req, res) => {
   try {
     const { user, text, avatar } = req.body;
+    if (!text) return res.status(400).json({ message: "Please write a post firs>
 
-    // Validation
-    if (!text || !user) {
-      return res.status(400).json({ message: "Missing user or post text" });
-    }
-
-    // Check if user exists
-    const u = await usersDB.query("SELECT * FROM users WHERE username=$1", [user]);
-    if (u.rows.length === 0) {
-      return res.status(400).json({ message: "User not found" });
-    }
-
-    // Insert post
     await postsDB.query(
-      "INSERT INTO posts (username, email, text, avatar) VALUES ($1, $2, $3, $4)",
-      [u.rows[0].username, u.rows[0].email, text, avatar || "🙂"]
+      "INSERT INTO posts (username, email, text, avatar) VALUES ($1, $2, $3, $4>
+      [u.rows[0].username, u.rows[0].email, text, avatar]
     );
 
-    // Success response
-    res.json({ message: "Post Created" });
-
+    res.json({ message: "Post Created" });                                      
   } catch (err) {
-    console.error("Error creating post:", {
-      message: err.message,
-      stack: err.stack
-    });
-
-    // Short, safe client message
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error creating post", error: err.message }>
   }
 });
-
 
 // 🔹 Get all posts
 app.get("/post", async (req, res) => {
