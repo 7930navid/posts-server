@@ -2,9 +2,6 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const helmet = require("helmet");
-const bcrypt = require("bcrypt");
-
-
 const { Pool } = require("pg");
 
 const app = express();
@@ -17,19 +14,15 @@ app.use(
   })
 );
 
-
-// 🔹 Post-DB connections
-
+// 🔹 Posts Database
 const postsDB = new Pool({
   connectionString: process.env.POSTS_DB_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-
-// 🔹 Initialize tables
+// 🔹 Init DB
 async function initDB() {
   try {
-
     await postsDB.query(`
       CREATE TABLE IF NOT EXISTS posts (
         id SERIAL PRIMARY KEY,
@@ -39,44 +32,50 @@ async function initDB() {
         avatar TEXT NOT NULL
       );
     `);
-
-
-    console.log("✅ Post table initialized successfully!");
+    console.log("✅ Posts table ready");
   } catch (err) {
-    console.error("❌ Error initializing table:", err.message);
+    console.error("❌ DB init error:", err.message);
   }
 }
 
-
-
-// 🔹 Create Post  
+// 🔹 Create Post
 app.post("/post", async (req, res) => {
   try {
     const { user, text, avatar } = req.body;
-    if (!text) return res.status(400).json({ message: "Please write a post firs>
+
+    if (!user || !user.username || !user.email) {
+      return res.status(400).json({ message: "User info missing" });
+    }
+
+    if (!text) {
+      return res.status(400).json({ message: "Please write a post first" });
+    }
 
     await postsDB.query(
-      "INSERT INTO posts (username, email, text, avatar) VALUES ($1, $2, $3, $4>
-      [u.rows[0].username, u.rows[0].email, text, avatar]
+      "INSERT INTO posts (username, email, text, avatar) VALUES ($1,$2,$3,$4)",
+      [user.username, user.email, text, avatar]
     );
 
-    res.json({ message: "Post Created" });                                      
+    res.json({ message: "Post created successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Error creating post", error: err.message }>
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-// 🔹 Get all posts
+// 🔹 Get All Posts
 app.get("/post", async (req, res) => {
   try {
-    const posts = await postsDB.query("SELECT * FROM posts ORDER BY id DESC");
+    const posts = await postsDB.query(
+      "SELECT * FROM posts ORDER BY id DESC"
+    );
     res.json(posts.rows);
   } catch (err) {
-    res.status(500).json({ message: "Error fetching posts", error: err.message });
+    res.status(500).json({ message: "Error fetching posts" });
   }
 });
 
-// 🔹 Edit Post by ID + Email
+// 🔹 Edit Post
 app.put("/post/:email/:id", async (req, res) => {
   try {
     const { email, id } = req.params;
@@ -87,12 +86,13 @@ app.put("/post/:email/:id", async (req, res) => {
       [text, id, email]
     );
 
-    if (result.rowCount === 0)
-      return res.status(404).json({ message: "Post not found or unauthorized" });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Unauthorized or not found" });
+    }
 
-    res.json({ message: "Post updated successfully", post: result.rows[0] });
+    res.json({ message: "Post updated", post: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ message: "Error updating post", error: err.message });
+    res.status(500).json({ message: "Update failed" });
   }
 });
 
@@ -101,72 +101,51 @@ app.delete("/post/:email/:id", async (req, res) => {
   try {
     const { email, id } = req.params;
 
-    const result = await postsDB.query("DELETE FROM posts WHERE id=$1 AND email=$2", [id, email]);
+    const result = await postsDB.query(
+      "DELETE FROM posts WHERE id=$1 AND email=$2",
+      [id, email]
+    );
 
-    if (result.rowCount > 0) {
-      res.json({ message: "Post deleted successfully" });
-    } else {
-      res.status(404).json({ message: "Post not found or unauthorized" });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Unauthorized or not found" });
     }
 
+    res.json({ message: "Post deleted" });
   } catch (err) {
-    res.status(500).json({ message: "Error deleting post", error: err.message });
+    res.status(500).json({ message: "Delete failed" });
   }
 });
 
-
-// 🔹 Delete User + Posts
+// 🔹 Delete All Posts of a User
 app.delete("/deleteuser/:email", async (req, res) => {
   try {
     const { email } = req.params;
-    await postsDB.query("DELETE FROM posts WHERE email=$1", [email]);
 
-    if (result.rowCount > 0)
-      res.json({ message: `All posts of ${email} has been deleted` });
-    else
-      res.status(404).json({ message: "User not found" });
-  } catch (err) {}
-});
-
-
-// 🔐 Verify password (for sensitive actions)
-app.post("/verify-password", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: "Missing data" });
-    }
-
-    const result = await usersDB.query(
-      "SELECT password FROM users WHERE email=$1",
+    const result = await postsDB.query(
+      "DELETE FROM posts WHERE email=$1",
       [email]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "No posts found" });
     }
 
-    const hashedPassword = result.rows[0].password;
-    const isValid = await bcrypt.compare(password, hashedPassword);
-
-    if (!isValid) {
-      return res.status(401).json({ message: "Wrong password" });
-    }
-
-    res.json({ message: "Password verified" });
+    res.json({ message: `All posts of ${email} deleted` });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 });
 
-// 🔹 Server check
-app.get("/", (req, res) => res.json({ message: "Backend is working ✅" }));
+// 🔹 Health Check
+app.get("/", (req, res) => {
+  res.json({ message: "Backend working ✅" });
+});
 
 // 🔹 Start Server
 const PORT = process.env.PORT || 5000;
-async function startServer() {
+(async () => {
   await initDB();
-  app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-}
-startServer();
+  app.listen(PORT, () =>
+    console.log(`✅ Server running on port ${PORT}`)
+  );
+})();
