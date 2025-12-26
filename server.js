@@ -146,22 +146,30 @@ app.put("/edituserposts/:email", async (req, res) => {
 });
 
 // 🔹 Delete All Posts of a User
-app.delete("/deleteuser/:email", async (req, res) => {
+app.delete("/deleteuserposts/:email", async (req, res) => {
   try {
     const { email } = req.params;
 
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
     const result = await postsDB.query(
-      "DELETE FROM posts WHERE email=$1",
+      "DELETE FROM posts WHERE email = $1",
       [email]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: "No posts found" });
-    }
+    res.json({
+      message: "All user posts deleted successfully",
+      deletedCount: result.rowCount
+    });
 
-    res.json({ message: `All posts of ${email} deleted` });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Error deleting user posts:", err.message);
+    res.status(500).json({
+      message: "Failed to delete user posts",
+      error: err.message
+    });
   }
 });
 
