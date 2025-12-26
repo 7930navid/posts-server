@@ -38,6 +38,26 @@ async function initDB() {
   }
 }
 
+
+// 🔹 Keep-Alive ping for postsDB
+async function keepPostsDBAlive() {
+  try {
+    const res = await postsDB.query("SELECT 1"); // lightweight ping
+    console.log(`[${new Date().toISOString()}] postsDB ping success`, res.rows[0]);
+  } catch (err) {
+    console.error(`[${new Date().toISOString()}] postsDB ping failed:`, err.message);
+  }
+}
+
+// 🔹 Ping interval (6 hours)
+const PING_INTERVAL = 1000 * 60 * 60 * 6; // 6 hours
+setInterval(keepPostsDBAlive, PING_INTERVAL);
+
+// initial ping immediately on server start
+keepPostsDBAlive();
+
+
+
 // 🔹 Create Post
 app.post("/post", async (req, res) => {
   try {
