@@ -173,6 +173,33 @@ app.delete("/deleteuserposts/:email", async (req, res) => {
   }
 });
 
+// 🔹 Get posts by user email (for other profile)
+app.get("/posts", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const result = await postsDB.query(
+      `SELECT id, username, email, text, avatar
+       FROM posts
+       WHERE email = $1
+       ORDER BY id DESC`,
+      [email]
+    );
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error("Fetch user posts error:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
 // 🔹 Health Check
 app.get("/", (req, res) => {
   res.json({ message: "Backend working ✅" });
