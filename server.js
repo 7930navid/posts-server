@@ -47,13 +47,16 @@ function getUserPool(email) {
   return dbPools[hashToIndex(email)];
 }
 
-// 🔹 Init DB tables on all pools
+// 🔹 Init DB tables on all pools with UUID
 async function initDB() {
   for (const pool of dbPools) {
     try {
+      // Enable pgcrypto for UUID
+      await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`);
+
       await pool.query(`
         CREATE TABLE IF NOT EXISTS posts (
-          id SERIAL PRIMARY KEY,
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           username TEXT NOT NULL,
           email TEXT NOT NULL,
           avatar TEXT NOT NULL,
@@ -84,154 +87,115 @@ pingAllPools();
 
 // 🔹 Routes
 
-// Health check
-app.get("/", (req, res) => res.json({ message: "Backend working ✅" }));
+app.get("/", (req,res)=>res.json({message:"Backend working ✅"}));
 
 // Create Post
-app.post("/post", async (req, res) => {
-  try {
+app.post("/post", async (req,res)=>{
+  try{
     const { user, post, avatar } = req.body;
-    if (!user?.email || !user?.username || !post?.text) {
-      return res.status(400).json({ message: "Invalid data" });
-    }
+    if(!user?.email || !user?.username || !post?.text) return res.status(400).json({message:"Invalid data"});
 
     const pool = getUserPool(user.email);
-
-    await pool.query(
-      `INSERT INTO posts (username, email, avatar, post)
-       VALUES ($1,$2,$3,$4)`,
-      [user.username, user.email, avatar, post]
+    const result = await pool.query(
+      `INSERT INTO posts (username,email,avatar,post) VALUES($1,$2,$3,$4) RETURNING *`,
+      [user.username,user.email,avatar,post]
     );
 
-    res.json({ message: "Post created successfully" });
-  } catch (err) {
+    res.json({message:"Post created", post: result.rows[0]});
+  }catch(err){
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({message:"Server error"});
   }
 });
 
 // Get all posts
-app.get("/post", async (req, res) => {
-  try {
-    const results = await Promise.all(
-      dbPools.map(p => p.query("SELECT * FROM posts"))
-    );
-
-    const posts = results
-      .flatMap(r => r.rows)
-      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-
+app.get("/post", async (req,res)=>{
+  try{
+    const results = await Promise.all(dbPools.map(p=>p.query("SELECT * FROM posts")));
+    const posts = results.flatMap(r=>r.rows).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     res.json(posts);
-  } catch (err) {
+  }catch(err){
     console.error(err);
-    res.status(500).json({ message: "Error fetching posts" });
+    res.status(500).json({message:"Error fetching posts"});
   }
 });
 
-// Get posts by user email
-app.get("/posts", async (req, res) => {
-  try {
+// Get posts by user
+app.get("/posts", async (req,res)=>{
+  try{
     const { email } = req.query;
-    if (!email) return res.status(400).json({ message: "Email required" });
-
+    if(!email) return res.status(400).json({message:"Email required"});
     const pool = getUserPool(email);
-    const result = await pool.query(
-      "SELECT * FROM posts WHERE email=$1 ORDER BY id DESC",
-      [email]
-    );
+    const result = await pool.query("SELECT * FROM posts WHERE email=$1 ORDER BY created_at DESC",[email]);
     res.json(result.rows);
-  } catch (err) {
+  }catch(err){
     console.error(err);
-    res.status(500).json({ message: "Error fetching user posts" });
+    res.status(500).json({message:"Error fetching user posts"});
   }
 });
 
 // Edit Post
-app.put("/post/:email/:id", async (req, res) => {
-  try {
-    const { email, id } = req.params;
+app.put("/post/:email/:id", async (req,res)=>{
+  try{
+    const { email,id } = req.params;
     const { post } = req.body;
     const pool = getUserPool(email);
-
-    const result = await pool.query(
-      "UPDATE posts SET post=$1 WHERE id=$2 AND email=$3 RETURNING *",
-      [post, id, email]
-    );
-
-    if (result.rowCount === 0)
-      return res.status(404).json({ message: "Unauthorized or not found" });
-
-    res.json({ message: "Post updated", post: result.rows[0] });
-  } catch (err) {
+    const result = await pool.query("UPDATE posts SET post=$1 WHERE id=$2 AND email=$3 RETURNING *",[post,id,email]);
+    if(result.rowCount===0) return res.status(404).json({message:"Not found"});
+    res.json({message:"Post updated", post: result.rows[0]});
+  }catch(err){
     console.error(err);
-    res.status(500).json({ message: "Update failed" });
+    res.status(500).json({message:"Update failed"});
   }
 });
 
 // Delete Post
-app.delete("/post/:email/:id", async (req, res) => {
-  try {
-    const { email, id } = req.params;
+app.delete("/post/:email/:id", async (req,res)=>{
+  try{
+    const { email,id } = req.params;
     const pool = getUserPool(email);
-
-    const result = await pool.query(
-      "DELETE FROM posts WHERE id=$1 AND email=$2",
-      [id, email]
-    );
-
-    if (result.rowCount === 0)
-      return res.status(404).json({ message: "Unauthorized or not found" });
-
-    res.json({ message: "Post deleted" });
-  } catch (err) {
+    const result = await pool.query("DELETE FROM posts WHERE id=$1 AND email=$2",[id,email]);
+    if(result.rowCount===0) return res.status(404).json({message:"Not found"});
+    res.json({message:"Post deleted"});
+  }catch(err){
     console.error(err);
-    res.status(500).json({ message: "Delete failed" });
+    res.status(500).json({message:"Delete failed"});
   }
 });
 
-// Update all posts of a user (username + avatar)
-app.put("/edituserposts/:email", async (req, res) => {
-  try {
+// Update all posts of a user
+app.put("/edituserposts/:email", async (req,res)=>{
+  try{
     const { email } = req.params;
-    const { username, avatar } = req.body;
-    if (!username || !avatar)
-      return res.status(400).json({ message: "Missing username or avatar" });
-
+    const { username,avatar } = req.body;
+    if(!username || !avatar) return res.status(400).json({message:"Missing data"});
     const pool = getUserPool(email);
-    const result = await pool.query(
-      "UPDATE posts SET username=$1, avatar=$2 WHERE email=$3 RETURNING *",
-      [username, avatar, email]
-    );
-
-    if (result.rowCount === 0)
-      return res.status(404).json({ message: "No posts found for this user" });
-
-    res.json({ message: `All posts of ${email} updated`, updatedPosts: result.rows });
-  } catch (err) {
+    const result = await pool.query("UPDATE posts SET username=$1, avatar=$2 WHERE email=$3 RETURNING *",[username,avatar,email]);
+    if(result.rowCount===0) return res.status(404).json({message:"No posts found"});
+    res.json({message:`All posts of ${email} updated`, updatedPosts: result.rows});
+  }catch(err){
     console.error(err);
-    res.status(500).json({ message: "Failed to update posts" });
+    res.status(500).json({message:"Failed to update posts"});
   }
 });
 
 // Delete all posts of a user
-app.delete("/deleteuserposts/:email", async (req, res) => {
-  try {
+app.delete("/deleteuserposts/:email", async (req,res)=>{
+  try{
     const { email } = req.params;
-    if (!email) return res.status(400).json({ message: "Email is required" });
-
+    if(!email) return res.status(400).json({message:"Email required"});
     const pool = getUserPool(email);
-    const result = await pool.query("DELETE FROM posts WHERE email=$1", [email]);
-
-    res.json({ message: "All user posts deleted", deletedCount: result.rowCount });
-  } catch (err) {
+    const result = await pool.query("DELETE FROM posts WHERE email=$1",[email]);
+    res.json({message:"All user posts deleted", deletedCount: result.rowCount});
+  }catch(err){
     console.error(err);
-    res.status(500).json({ message: "Failed to delete user posts" });
+    res.status(500).json({message:"Failed to delete user posts"});
   }
 });
 
 // 🔹 Start server
-const PORT = process.env.PORT || 5000;
-(async () => {
+const PORT = process.env.PORT||5000;
+(async()=>{
   await initDB();
-  app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+  app.listen(PORT,()=>console.log(`✅ Server running on port ${PORT}`));
 })();
