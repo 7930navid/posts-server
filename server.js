@@ -90,23 +90,43 @@ pingAllPools();
 app.get("/", (req,res)=>res.json({message:"Backend working ✅"}));
 
 // Create Post
-app.post("/post", async (req,res)=>{
-  try{
-    const { user, post, avatar } = req.body;
-    if(!user?.email || !user?.username || !post?.text) return res.status(400).json({message:"Invalid data"});
+app.post("/post", async (req, res) => {
+  try {
+    const { user, post, avatar, feelings, location, others } = req.body;
+
+    if (!user?.email || !user?.username || !post?.text) {
+      return res.status(400).json({ message: "Invalid data" });
+    }
 
     const pool = getUserPool(user.email);
+
     const result = await pool.query(
-      `INSERT INTO posts (username,email,avatar,post) VALUES($1,$2,$3,$4) RETURNING *`,
-      [user.username,user.email,avatar,post]
+      `INSERT INTO posts 
+      (username, email, avatar, post, feelings, location, others) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7) 
+      RETURNING *`,
+      [
+        user.username,
+        user.email,
+        avatar,
+        post,
+        feelings || null,
+        location || null,
+        JSON.stringify(others || [])
+      ]
     );
 
-    res.json({message:"Post created", post: result.rows[0]});
-  }catch(err){
+    res.json({
+      message: "Post created",
+      post: result.rows[0]
+    });
+
+  } catch (err) {
     console.error(err);
-    res.status(500).json({message:"Server error"});
+    res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // Get all posts
 app.get("/post", async (req,res)=>{
