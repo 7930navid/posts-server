@@ -143,7 +143,7 @@ app.get("/post", async (req,res)=>{
 // Get posts by user
 app.get("/postOfAnUser/:email", async (req,res)=>{
   try{
-    const email = req.parms.email;
+    const email = req.params.email;
     if(!email) return res.status(400).json({message:"Email required"});
     const pool = getUserPool(email);
     const result = await pool.query("SELECT * FROM posts WHERE email=$1 ORDER BY created_at DESC",[email]);
