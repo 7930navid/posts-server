@@ -14,19 +14,9 @@ app.use(
   })
 );
 
-// 🔹 Multi-DB URLs (10 DBs)
-const dbUrls = [
-  "postgresql://neondb_owner:npg_BVZsnRw47Xev@ep-icy-night-aigqp1l0-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_3NMUSF0vnwoB@ep-misty-sound-ai84wk63-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_qncA1oPLrBi2@ep-solitary-smoke-aiyildjx-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_EPkLtjuG21Yy@ep-quiet-bread-ai16qo25-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_xwuZ0lAjUX7v@ep-falling-frost-aiuxn4rr-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_COFxG0zQuTP9@ep-sparkling-waterfall-ais3zih3-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_Oq51cRZApJHf@ep-dry-mud-aipu6fg7-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_oc5SFmyLR2JI@ep-empty-dust-ai3bn45u-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_oGbQTHuFkV21@ep-round-bird-aijs4ixk-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-  "postgresql://neondb_owner:npg_7rwnXpzCL0Ff@ep-steep-bonus-ai86o1rr-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-];
+// 🔹 Multi-DB URLs (2 DBs)
+const dbUrls =
+process.env.DB_URLS.split(",");
 
 // 🔹 Initialize Pools
 const dbPools = dbUrls.map(
