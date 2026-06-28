@@ -14,6 +14,8 @@ app.use(
   })
 );
 
+app.options("*", cors()); // Handle preflight for all routes
+
 // 🔹 Multi-DB URLs (2 DBs)
 const dbUrls =
 process.env.DB_URLS.split(",");
