@@ -84,7 +84,7 @@ app.post("/post", async (req, res) => {
   try {
     const { user, post, avatar, feelings, location, others } = req.body;
 
-    if (!user?.email || !user?.username || !post?.text) {
+    if (!user?.email || !user?.username || (!post?.text && !post?.image) ) {
       return res.status(400).json({ message: "Invalid data" });
     }
 
