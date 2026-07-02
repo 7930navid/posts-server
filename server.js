@@ -104,7 +104,7 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        JSON.stringify(others || [])
+        others || []
       ]
     );
 
