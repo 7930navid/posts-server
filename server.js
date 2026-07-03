@@ -86,6 +86,14 @@ app.post("/post", async (req, res) => {
   try {
     const { user, post, avatar, feelings, location, others } = req.body;
 
+
+console.log(req.body);
+    console.log("others:", others);
+    console.log("typeof others:", typeof others);
+    console.log("Array:", Array.isArray(others));
+    console.log("JSON:", JSON.stringify(others));
+
+
     if (!user?.email || !user?.username || (!post?.text && !post?.image) ) {
       return res.status(400).json({ message: "Invalid data" });
     }
