@@ -89,39 +89,67 @@ app.get("/", (req,res)=>res.json({message:"Backend working ✅"}));
 // Create Post
 app.post("/post", async (req, res) => {
   try {
-    const { user, post, avatar, feelings, location, others } = req.body;
 
+    console.log("========== BODY ==========");
+    console.log(req.body);
 
-console.log(req.body);
-    console.log("others:", others);
-    console.log("typeof others:", typeof others);
-    console.log("Array:", Array.isArray(others));
-    console.log("JSON:", JSON.stringify(others));
-console.log("post:", post);
-console.log("typeof post:", typeof post);
-console.log("post JSON:", JSON.stringify(post));
+    const {
+      user,
+      post,
+      avatar,
+      feelings,
+      location,
+      others
+    } = req.body;
 
-    if (!user?.email || !user?.username || (!post?.text && !post?.image) ) {
-      return res.status(400).json({ message: "Invalid data" });
+    console.log("========== OTHERS ==========");
+    console.log(others);
+    console.log("typeof:", typeof others);
+    console.log("isArray:", Array.isArray(others));
+    console.log("JSON:", JSON.stringify(others, null, 2));
+
+    if (Array.isArray(others)) {
+      others.forEach((o, i) => {
+        console.log(`others[${i}] =`, o);
+        console.log({
+          email: o.email,
+          name: o.name,
+          avatar: o.avatar,
+          emailType: typeof o.email,
+          nameType: typeof o.name,
+          avatarType: typeof o.avatar
+        });
+      });
     }
+
+    const safeOthers = Array.isArray(others)
+      ? others.map(o => ({
+          email: String(o.email || ""),
+          name: String(o.name || ""),
+          avatar: String(o.avatar || "")
+        }))
+      : [];
+
+    console.log("========== SAFE OTHERS ==========");
+    console.log(JSON.stringify(safeOthers, null, 2));
 
     const pool = getUserPool(user.email);
 
-const result = await pool.query(
-  `INSERT INTO posts
-  (username, email, avatar, post, feelings, location)
-  VALUES ($1, $2, $3, $4, $5, $6)
-  RETURNING *`,
-  [
-    user.username,
-    user.email,
-    avatar,
-    post,
-    feelings || null,
-    location || null
-  ]
-);
-
+    const result = await pool.query(
+      `INSERT INTO posts
+      (username, email, avatar, post, feelings, location, others)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      RETURNING *`,
+      [
+        user.username,
+        user.email,
+        avatar,
+        post,
+        feelings || null,
+        location || null,
+        JSON.stringify(safeOthers)
+      ]
+    );
 
     res.json({
       message: "Post created",
@@ -129,10 +157,15 @@ const result = await pool.query(
     });
 
   } catch (err) {
+    console.error("INSERT ERROR:");
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+
+    res.status(500).json({
+      message: err.message
+    });
   }
 });
+
 
 
 // Get all posts
