@@ -97,7 +97,9 @@ console.log(req.body);
     console.log("typeof others:", typeof others);
     console.log("Array:", Array.isArray(others));
     console.log("JSON:", JSON.stringify(others));
-
+console.log("post:", post);
+console.log("typeof post:", typeof post);
+console.log("post JSON:", JSON.stringify(post));
 
     if (!user?.email || !user?.username || (!post?.text && !post?.image) ) {
       return res.status(400).json({ message: "Invalid data" });
@@ -105,21 +107,21 @@ console.log(req.body);
 
     const pool = getUserPool(user.email);
 
-    const result = await pool.query(
-      `INSERT INTO posts 
-      (username, email, avatar, post, feelings, location, others) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7) 
-      RETURNING *`,
-      [
-        user.username,
-        user.email,
-        avatar,
-        post,
-        feelings || null,
-        location || null,
-        others || []
-      ]
-    );
+const result = await pool.query(
+  `INSERT INTO posts
+  (username, email, avatar, post, feelings, location)
+  VALUES ($1, $2, $3, $4, $5, $6)
+  RETURNING *`,
+  [
+    user.username,
+    user.email,
+    avatar,
+    post,
+    feelings || null,
+    location || null
+  ]
+);
+
 
     res.json({
       message: "Post created",
