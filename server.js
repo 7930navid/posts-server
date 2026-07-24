@@ -142,7 +142,7 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        safeOthers // JSON.stringify ছাড়া সরাসরি পাস করা হচ্ছে
+        JSON.stringify(safeOthers) // JSON.stringify ছাড়া সরাসরি পাস করা হচ্ছে
       ]
     );
 
