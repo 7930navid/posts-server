@@ -131,7 +131,7 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        JSON.stringify(safeOthers) // সঠিকভাবে JSON string পাঠানো হচ্ছে
+        safeOthers
       ]
     );
 
