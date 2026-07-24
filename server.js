@@ -91,9 +91,20 @@ app.post("/post", async (req, res) => {
   try {
     const { user, post, avatar, feelings, location, others } = req.body;
 
-    // Array validation & Sanitization
-    const safeOthers = Array.isArray(others)
-      ? others.map((o) => ({
+    // ১. ডাটা প্রসেস ও সেনিটাইজেশন
+    let parsedOthers = others;
+    
+    // যদি ফ্রন্টএন্ড থেকে স্ট্রিং হিসেবে আসে
+    if (typeof others === "string") {
+      try {
+        parsedOthers = JSON.parse(others);
+      } catch (e) {
+        parsedOthers = [];
+      }
+    }
+
+    const safeOthers = Array.isArray(parsedOthers)
+      ? parsedOthers.map((o) => ({
           email: String(o?.email || ""),
           name: String(o?.name || ""),
           avatar: String(o?.avatar || ""),
@@ -102,28 +113,29 @@ app.post("/post", async (req, res) => {
 
     const pool = getUserPool(user.email);
 
+    // ২. ডাটাবেজ কোয়েরি
     const result = await pool.query(
       `INSERT INTO posts
       (username, email, avatar, post, feelings, location, others)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *`,
       [
-        user.username,
-        user.email,
+        user?.username,
+        user?.email,
         avatar,
         post,
         feelings || null,
         location || null,
-        JSON.stringify(safeOthers)
+        JSON.stringify(safeOthers) // সঠিকভাবে JSON string পাঠানো হচ্ছে
+      ]
     );
 
     res.json({
-      message: "Post created",
+      message: "Post created successfully",
       post: result.rows[0],
     });
   } catch (err) {
     console.error("INSERT ERROR:", err.message);
-
     res.status(500).json({
       message: err.message,
     });
