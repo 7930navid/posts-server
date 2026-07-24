@@ -91,19 +91,26 @@ pingAllPools();
 
 app.get("/", (req,res)=>res.json({message:"Backend working ✅"}));
 
-// Create Post
+/* === 2. CREATE POST ROUTE === */
 app.post("/post", async (req, res) => {
+  console.group("\x1b[33m⚙️ [Step 2 & 3] Backend: Incoming POST Request & DB Insertion\x1b[0m");
+  
   try {
     const { user, post, avatar, feelings, location, others } = req.body;
 
+    console.log("📥 Raw Received 'others':", others);
+    console.log("📥 Raw 'others' Data Type:", typeof others);
+
     // ১. ডাটা প্রসেস ও সেনিটাইজেশন
     let parsedOthers = others;
-    
-    // যদি ফ্রন্টএন্ড থেকে স্ট্রিং হিসেবে আসে
+
     if (typeof others === "string") {
+      console.warn("⚠️ 'others' came as String! Attempting JSON.parse()...");
       try {
         parsedOthers = JSON.parse(others);
+        console.log("✅ Parsed successfully into object/array.");
       } catch (e) {
+        console.error("❌ JSON Parse Failed. Resetting to empty array []. Error:", e.message);
         parsedOthers = [];
       }
     }
@@ -115,6 +122,10 @@ app.post("/post", async (req, res) => {
           avatar: String(o?.avatar || ""),
         }))
       : [];
+
+    console.log("🛡️ Sanitized safeOthers Array:", safeOthers);
+    console.log("🛡️ Is safeOthers Array?:", Array.isArray(safeOthers));
+    console.log("💾 Data Type being sent to DB:", typeof safeOthers, "| Is Array:", Array.isArray(safeOthers));
 
     const pool = getUserPool(user.email);
 
@@ -131,16 +142,23 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        safeOthers
+        safeOthers // JSON.stringify ছাড়া সরাসরি পাস করা হচ্ছে
       ]
     );
+
+    console.log("✅ DB Insert Success. Saved Row 'others':", result.rows[0]?.others);
+    console.log("✅ Returned 'others' Type from DB:", typeof result.rows[0]?.others);
+    console.groupEnd();
 
     res.json({
       message: "Post created successfully",
       post: result.rows[0],
     });
+
   } catch (err) {
-    console.error("INSERT ERROR:", err.message);
+    console.error("💥 DB INSERT ERROR:", err.message);
+    console.groupEnd();
+
     res.status(500).json({
       message: err.message,
     });
@@ -148,8 +166,10 @@ app.post("/post", async (req, res) => {
 });
 
 
-// Get all posts
+/* === 3. GET ALL POSTS ROUTE === */
 app.get("/post", async (req, res) => {
+  console.group("\x1b[36m📦 [Step 4] Backend: Fetching Posts from DB Pools\x1b[0m");
+
   try {
     const results = await Promise.all(
       dbPools.map((p) => p.query("SELECT * FROM posts"))
@@ -157,32 +177,46 @@ app.get("/post", async (req, res) => {
 
     const posts = results
       .flatMap((r) => r.rows)
-      .map((post) => {
-        // others যদি স্ট্রিং আকারে আসে, তবে পার্স করে অ্যারে বানিয়ে দেওয়া
+      .map((post, index) => {
         let safeOthers = post.others;
+        const rawType = typeof safeOthers;
 
         if (typeof safeOthers === "string") {
+          console.warn(`⚠️ Post ID ${post.id || index + 1}: 'others' was String in DB! Parsing...`);
           try {
             safeOthers = JSON.parse(safeOthers);
           } catch (e) {
+            console.error(`❌ Post ID ${post.id || index + 1}: JSON parse failed. Resetting to [].`);
             safeOthers = [];
           }
         }
 
+        const finalOthers = Array.isArray(safeOthers) ? safeOthers : [];
+
+        // ডিব্যাগিংয়ের জন্য লগে টাইপ দেখা যাবে
+        if (index < 3) { // প্রথম ৩টি পোস্ট কনসোলে প্রিন্ট করে টেস্টের জন্য
+          console.log(`📌 Post #${index + 1} | Raw DB Type: ${rawType} -> Formatted Type: ${Array.isArray(finalOthers) ? "Array" : typeof finalOthers}`);
+        }
+
         return {
           ...post,
-          others: Array.isArray(safeOthers) ? safeOthers : [],
+          others: finalOthers,
         };
       })
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+    console.log(`✅ Total ${posts.length} posts fetched & verified.`);
+    console.groupEnd();
+
     res.json(posts);
+
   } catch (err) {
-    console.error("FETCH ERROR:", err);
+    console.error("💥 FETCH ERROR:", err.message);
+    console.groupEnd();
+
     res.status(500).json({ message: "Error fetching posts" });
   }
 });
-
 
 
 // Get posts by user
