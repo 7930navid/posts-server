@@ -144,16 +144,41 @@ app.post("/post", async (req, res) => {
 
 
 // Get all posts
-app.get("/post", async (req,res)=>{
-  try{
-    const results = await Promise.all(dbPools.map(p=>p.query("SELECT * FROM posts")));
-    const posts = results.flatMap(r=>r.rows).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+app.get("/post", async (req, res) => {
+  try {
+    const results = await Promise.all(
+      dbPools.map((p) => p.query("SELECT * FROM posts"))
+    );
+
+    const posts = results
+      .flatMap((r) => r.rows)
+      .map((post) => {
+        // others যদি স্ট্রিং আকারে আসে, তবে পার্স করে অ্যারে বানিয়ে দেওয়া
+        let safeOthers = post.others;
+
+        if (typeof safeOthers === "string") {
+          try {
+            safeOthers = JSON.parse(safeOthers);
+          } catch (e) {
+            safeOthers = [];
+          }
+        }
+
+        return {
+          ...post,
+          others: Array.isArray(safeOthers) ? safeOthers : [],
+        };
+      })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
     res.json(posts);
-  }catch(err){
-    console.error(err);
-    res.status(500).json({message:"Error fetching posts"});
+  } catch (err) {
+    console.error("FETCH ERROR:", err);
+    res.status(500).json({ message: "Error fetching posts" });
   }
 });
+
+
 
 // Get posts by user
 app.get("/postOfAnUser/:email", async (req,res)=>{
