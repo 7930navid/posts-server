@@ -89,56 +89,23 @@ app.get("/", (req,res)=>res.json({message:"Backend working ✅"}));
 // Create Post
 app.post("/post", async (req, res) => {
   try {
+    const { user, post, avatar, feelings, location, others } = req.body;
 
-    console.log("========== BODY ==========");
-    console.log(req.body);
-
-    const {
-      user,
-      post,
-      avatar,
-      feelings,
-      location,
-      others
-    } = req.body;
-
-    console.log("========== OTHERS ==========");
-    console.log(others);
-    console.log("typeof:", typeof others);
-    console.log("isArray:", Array.isArray(others));
-    console.log("JSON:", JSON.stringify(others, null, 2));
-
-    if (Array.isArray(others)) {
-      others.forEach((o, i) => {
-        console.log(`others[${i}] =`, o);
-        console.log({
-          email: o.email,
-          name: o.name,
-          avatar: o.avatar,
-          emailType: typeof o.email,
-          nameType: typeof o.name,
-          avatarType: typeof o.avatar
-        });
-      });
-    }
-
+    // Array validation & Sanitization
     const safeOthers = Array.isArray(others)
-      ? others.map(o => ({
+      ? others.map((o) => ({
           email: String(o.email || ""),
           name: String(o.name || ""),
-          avatar: String(o.avatar || "")
+          avatar: String(o.avatar || ""),
         }))
       : [];
-
-    console.log("========== SAFE OTHERS ==========");
-    console.log(JSON.stringify(safeOthers, null, 2));
 
     const pool = getUserPool(user.email);
 
     const result = await pool.query(
       `INSERT INTO posts
       (username, email, avatar, post, feelings, location, others)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *`,
       [
         user.username,
@@ -147,25 +114,22 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        JSON.stringify(safeOthers)
+        safeOthers 
       ]
     );
 
     res.json({
       message: "Post created",
-      post: result.rows[0]
+      post: result.rows[0],
     });
-
   } catch (err) {
-    console.error("INSERT ERROR:");
-    console.error(err);
+    console.error("INSERT ERROR:", err.message);
 
     res.status(500).json({
-      message: err.message
+      message: err.message,
     });
   }
 });
-
 
 
 // Get all posts
