@@ -91,24 +91,46 @@ pingAllPools();
 
 app.get("/", (req,res)=>res.json({message:"Backend working ✅"}));
 
+// 📌 ১. নতুন Vibe সেভ করার রুট (POST)
+app.post('/api/add-vibe', async (req, res) => {
+    const { email, username, vibe, avatar } = req.body;
+
+    try {
+        const query = `
+            INSERT INTO users_vibe (email, username, vibe, avatar)
+            VALUES ($1, $2, $3, $4)
+            RETURNING *;
+        `;
+        const result = await pool.query(query, [email, username, vibe || '', avatar || '']);
+        res.status(201).json({ success: true, data: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 📌 ২. সব Vibe পাওয়ার রুট (GET)
+app.get('/api/get-vibes', async (req, res) => {
+    try {
+        const result = await pool.query(`SELECT * FROM users_vibe ORDER BY created_at DESC;`);
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 /* === 2. CREATE POST ROUTE === */
 app.post("/post", async (req, res) => {
-  console.group("\x1b[33m⚙️ [Step 2 & 3] Backend: Incoming POST Request & DB Insertion\x1b[0m");
   
   try {
     const { user, post, avatar, feelings, location, others } = req.body;
 
-    console.log("📥 Raw Received 'others':", others);
-    console.log("📥 Raw 'others' Data Type:", typeof others);
-
-    // ১. ডাটা প্রসেস ও সেনিটাইজেশন
     let parsedOthers = others;
 
     if (typeof others === "string") {
       console.warn("⚠️ 'others' came as String! Attempting JSON.parse()...");
       try {
         parsedOthers = JSON.parse(others);
-        console.log("✅ Parsed successfully into object/array.");
       } catch (e) {
         console.error("❌ JSON Parse Failed. Resetting to empty array []. Error:", e.message);
         parsedOthers = [];
@@ -123,13 +145,9 @@ app.post("/post", async (req, res) => {
         }))
       : [];
 
-    console.log("🛡️ Sanitized safeOthers Array:", safeOthers);
-    console.log("🛡️ Is safeOthers Array?:", Array.isArray(safeOthers));
-    console.log("💾 Data Type being sent to DB:", typeof safeOthers, "| Is Array:", Array.isArray(safeOthers));
 
     const pool = getUserPool(user.email);
 
-    // ২. ডাটাবেজ কোয়েরি
     const result = await pool.query(
       `INSERT INTO posts
       (username, email, avatar, post, feelings, location, others)
@@ -142,9 +160,8 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        JSON.stringify(safeOthers) // JSON.stringify ছাড়া সরাসরি পাস করা হচ্ছে
-      ]
-    );
+        JSON.stringify(safeOthers)        
+ );
 
     console.log("✅ DB Insert Success. Saved Row 'others':", result.rows[0]?.others);
     console.log("✅ Returned 'others' Type from DB:", typeof result.rows[0]?.others);
@@ -157,7 +174,6 @@ app.post("/post", async (req, res) => {
 
   } catch (err) {
     console.error("💥 DB INSERT ERROR:", err.message);
-    console.groupEnd();
 
     res.status(500).json({
       message: err.message,
@@ -168,7 +184,6 @@ app.post("/post", async (req, res) => {
 
 /* === 3. GET ALL POSTS ROUTE === */
 app.get("/post", async (req, res) => {
-  console.group("\x1b[36m📦 [Step 4] Backend: Fetching Posts from DB Pools\x1b[0m");
 
   try {
     const results = await Promise.all(
@@ -193,11 +208,7 @@ app.get("/post", async (req, res) => {
 
         const finalOthers = Array.isArray(safeOthers) ? safeOthers : [];
 
-        // ডিব্যাগিংয়ের জন্য লগে টাইপ দেখা যাবে
-        if (index < 3) { // প্রথম ৩টি পোস্ট কনসোলে প্রিন্ট করে টেস্টের জন্য
-          console.log(`📌 Post #${index + 1} | Raw DB Type: ${rawType} -> Formatted Type: ${Array.isArray(finalOthers) ? "Array" : typeof finalOthers}`);
-        }
-
+   
         return {
           ...post,
           others: finalOthers,
@@ -206,13 +217,11 @@ app.get("/post", async (req, res) => {
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     console.log(`✅ Total ${posts.length} posts fetched & verified.`);
-    console.groupEnd();
-
+ 
     res.json(posts);
 
   } catch (err) {
     console.error("💥 FETCH ERROR:", err.message);
-    console.groupEnd();
 
     res.status(500).json({ message: "Error fetching posts" });
   }
