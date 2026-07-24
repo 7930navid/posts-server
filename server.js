@@ -94,9 +94,9 @@ app.post("/post", async (req, res) => {
     // Array validation & Sanitization
     const safeOthers = Array.isArray(others)
       ? others.map((o) => ({
-          email: String(o.email || ""),
-          name: String(o.name || ""),
-          avatar: String(o.avatar || ""),
+          email: String(o?.email || ""),
+          name: String(o?.name || ""),
+          avatar: String(o?.avatar || ""),
         }))
       : [];
 
@@ -114,8 +114,7 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        safeOthers 
-      ]
+        JSON.stringify(safeOthers)
     );
 
     res.json({
