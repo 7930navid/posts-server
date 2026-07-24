@@ -3,6 +3,11 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const helmet = require("helmet");
 const { Pool } = require("pg");
+const types = require('pg').types;
+
+types.setTypeParser(114, (val) => JSON.parse(val));
+types.setTypeParser(3802, (val) => JSON.parse(val));
+
 
 const app = express();
 app.use(helmet());
