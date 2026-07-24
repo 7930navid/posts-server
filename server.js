@@ -133,7 +133,7 @@ app.post("/post", async (req, res) => {
     const result = await pool.query(
       `INSERT INTO posts
       (username, email, avatar, post, feelings, location, others)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
       RETURNING *`,
       [
         user?.username,
