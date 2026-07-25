@@ -8,7 +8,6 @@ const types = require('pg').types;
 types.setTypeParser(114, (val) => JSON.parse(val));
 types.setTypeParser(3802, (val) => JSON.parse(val));
 
-
 const app = express();
 app.use(helmet());
 
@@ -18,26 +17,32 @@ app.use(bodyParser.urlencoded({
     limit: "50mb"
 }));
 
-app.use(
-  cors({
-    origin: ["https://7930navid.github.io", "http://localhost:8080"],
-  })
-);
+// 🔹 CORS Handling (Allowing Requests)
+app.use(cors({
+    origin: "*", // প্রয়োজনে নির্দিষ্ট Origin দিতে পারেন
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
-app.options("*", cors()); // Handle preflight for all routes
+app.options("*", cors()); // Preflight handling
 
-// 🔹 Multi-DB URLs (2 DBs)
-const dbUrls =
-process.env.DB_URLS.split(",");
+// 🔹 Multi-DB URLs
+const dbUrls = (process.env.DB_URLS || "").split(",").filter(Boolean);
 
 // 🔹 Initialize Pools
 const dbPools = dbUrls.map(
-  url => new Pool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 5, idleTimeoutMillis: 30000 })
+  url => new Pool({ 
+    connectionString: url.trim(), 
+    ssl: { rejectUnauthorized: false }, 
+    max: 5, 
+    idleTimeoutMillis: 30000 
+  })
 );
 
 // 🔹 Deterministic DB selector (HASH based)
 function hashToIndex(str) {
   let hash = 0;
+  if (!str) return 0;
   for (let i = 0; i < str.length; i++) {
     hash = (hash << 5) - hash + str.charCodeAt(i);
     hash |= 0;
@@ -46,16 +51,17 @@ function hashToIndex(str) {
 }
 
 function getUserPool(email) {
-  return dbPools[hashToIndex(email)];
+  if (!dbPools.length) throw new Error("No Database Connection Pools available!");
+  return dbPools[hashToIndex(email || "default")];
 }
 
-// 🔹 Init DB tables on all pools with UUID
+// 🔹 Init DB tables on all pools
 async function initDB() {
   for (const pool of dbPools) {
     try {
-      // Enable pgcrypto for UUID
       await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`);
 
+      // Posts Table
       await pool.query(`
         CREATE TABLE IF NOT EXISTS posts (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -63,10 +69,26 @@ async function initDB() {
           email TEXT NOT NULL,
           avatar TEXT NOT NULL,
           post JSONB NOT NULL,
+          feelings TEXT,
+          location TEXT,
+          others JSONB DEFAULT '[]'::jsonb,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
-      console.log("✅ Posts table ready on pool", pool.options.connectionString.slice(0,30) + "...");
+
+      // 📌 Users Vibe Table (Added Auto-creation)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users_vibe (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          email VARCHAR(255) NOT NULL,
+          username VARCHAR(100) NOT NULL,
+          vibe TEXT,
+          avatar TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      console.log("✅ DB Tables ready on pool");
     } catch (err) {
       console.error("❌ DB init error:", err.message);
     }
@@ -85,54 +107,60 @@ async function pingAllPools() {
   }
 }
 setInterval(pingAllPools, 1000 * 60 * 60 * 6);
-pingAllPools();
 
 // 🔹 Routes
 
-app.get("/", (req,res)=>res.json({message:"Backend working ✅"}));
+app.get("/", (req, res) => res.json({ message: "Backend working ✅" }));
 
-// 📌 ১. নতুন Vibe সেভ করার রুট (POST)
+// 📌 ১. নতুন Vibe সেভ করার রুট (POST) - FIXED pool.query
 app.post('/api/add-vibe', async (req, res) => {
     const { email, username, vibe, avatar } = req.body;
 
     try {
+        // Email অনুযায়ী সঠিক Pool পছন্দ করা
+        const pool = getUserPool(email);
+
         const query = `
             INSERT INTO users_vibe (email, username, vibe, avatar)
             VALUES ($1, $2, $3, $4)
             RETURNING *;
         `;
-        const result = await pool.query(query, [email, username, vibe || '', avatar || '']);
+        const result = await pool.query(query, [email || '', username || 'Anonymous', vibe || '', avatar || '']);
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("Vibe Post Error:", err.message);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// 📌 ২. সব Vibe পাওয়ার রুট (GET)
+// 📌 ২. সব Vibe পাওয়ার রুট (GET) - FIXED Multi-DB fetch
 app.get('/api/get-vibes', async (req, res) => {
     try {
-        const result = await pool.query(`SELECT * FROM users_vibe ORDER BY created_at DESC;`);
-        res.status(200).json({ success: true, data: result.rows });
+        // সব DB থেকে Vibes ডাটা নিয়ে কম্বাইন করা
+        const results = await Promise.all(
+          dbPools.map((p) => p.query(`SELECT * FROM users_vibe ORDER BY created_at DESC;`))
+        );
+        const vibes = results
+          .flatMap((r) => r.rows)
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        res.status(200).json({ success: true, data: vibes });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("Vibe Fetch Error:", err.message);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-
-/* === 2. CREATE POST ROUTE === */
+/* === 3. CREATE POST ROUTE === */
 app.post("/post", async (req, res) => {
-  
   try {
     const { user, post, avatar, feelings, location, others } = req.body;
 
     let parsedOthers = others;
-
     if (typeof others === "string") {
-      console.warn("⚠️ 'others' came as String! Attempting JSON.parse()...");
       try {
         parsedOthers = JSON.parse(others);
       } catch (e) {
-        console.error("❌ JSON Parse Failed. Resetting to empty array []. Error:", e.message);
         parsedOthers = [];
       }
     }
@@ -145,8 +173,7 @@ app.post("/post", async (req, res) => {
         }))
       : [];
 
-
-    const pool = getUserPool(user.email);
+    const pool = getUserPool(user?.email);
 
     const result = await pool.query(
       `INSERT INTO posts
@@ -160,12 +187,9 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        JSON.stringify(safeOthers)        
- );
-
-    console.log("✅ DB Insert Success. Saved Row 'others':", result.rows[0]?.others);
-    console.log("✅ Returned 'others' Type from DB:", typeof result.rows[0]?.others);
-    console.groupEnd();
+        JSON.stringify(safeOthers)
+      ]
+    );
 
     res.json({
       message: "Post created successfully",
@@ -174,17 +198,12 @@ app.post("/post", async (req, res) => {
 
   } catch (err) {
     console.error("💥 DB INSERT ERROR:", err.message);
-
-    res.status(500).json({
-      message: err.message,
-    });
+    res.status(500).json({ message: err.message });
   }
 });
 
-
-/* === 3. GET ALL POSTS ROUTE === */
+/* === 4. GET ALL POSTS ROUTE === */
 app.get("/post", async (req, res) => {
-
   try {
     const results = await Promise.all(
       dbPools.map((p) => p.query("SELECT * FROM posts"))
@@ -192,125 +211,79 @@ app.get("/post", async (req, res) => {
 
     const posts = results
       .flatMap((r) => r.rows)
-      .map((post, index) => {
+      .map((post) => {
         let safeOthers = post.others;
-        const rawType = typeof safeOthers;
-
         if (typeof safeOthers === "string") {
-          console.warn(`⚠️ Post ID ${post.id || index + 1}: 'others' was String in DB! Parsing...`);
           try {
             safeOthers = JSON.parse(safeOthers);
           } catch (e) {
-            console.error(`❌ Post ID ${post.id || index + 1}: JSON parse failed. Resetting to [].`);
             safeOthers = [];
           }
         }
-
-        const finalOthers = Array.isArray(safeOthers) ? safeOthers : [];
-
-   
         return {
           ...post,
-          others: finalOthers,
+          others: Array.isArray(safeOthers) ? safeOthers : [],
         };
       })
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    console.log(`✅ Total ${posts.length} posts fetched & verified.`);
- 
     res.json(posts);
 
   } catch (err) {
     console.error("💥 FETCH ERROR:", err.message);
-
     res.status(500).json({ message: "Error fetching posts" });
   }
 });
 
-
 // Get posts by user
-app.get("/postOfAnUser/:email", async (req,res)=>{
-  try{
+app.get("/postOfAnUser/:email", async (req, res) => {
+  try {
     const email = req.params.email;
-    if(!email) return res.status(400).json({message:"Email required"});
+    if (!email) return res.status(400).json({ message: "Email required" });
     const pool = getUserPool(email);
-    const result = await pool.query("SELECT * FROM posts WHERE email=$1 ORDER BY created_at DESC",[email]);
+    const result = await pool.query("SELECT * FROM posts WHERE email=$1 ORDER BY created_at DESC", [email]);
     res.json(result.rows);
-  }catch(err){
-    console.error(err);
-    res.status(500).json({message:"Error fetching user posts"});
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching user posts" });
   }
 });
 
 // Edit Post
-app.put("/post/:email/:id", async (req,res)=>{
-  try{
-    const { email,id } = req.params;
+app.put("/post/:email/:id", async (req, res) => {
+  try {
+    const { email, id } = req.params;
     const { post } = req.body;
     const pool = getUserPool(email);
-    const result = await pool.query("UPDATE posts SET post=$1 WHERE id=$2 AND email=$3 RETURNING *",[post,id,email]);
-    if(result.rowCount===0) return res.status(404).json({message:"Not found"});
-    res.json({message:"Post updated", post: result.rows[0]});
-  }catch(err){
-    console.error(err);
-    res.status(500).json({message:"Update failed"});
+    const result = await pool.query("UPDATE posts SET post=$1 WHERE id=$2 AND email=$3 RETURNING *", [post, id, email]);
+    if (result.rowCount === 0) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Post updated", post: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ message: "Update failed" });
   }
 });
 
 // Delete Post
-app.delete("/post/:email/:id", async (req,res)=>{
-  try{
-    const { email,id } = req.params;
+app.delete("/post/:email/:id", async (req, res) => {
+  try {
+    const { email, id } = req.params;
     const pool = getUserPool(email);
-    const result = await pool.query("DELETE FROM posts WHERE id=$1 AND email=$2",[id,email]);
-    if(result.rowCount===0) return res.status(404).json({message:"Not found"});
-    res.json({message:"Post deleted"});
-  }catch(err){
-    console.error(err);
-    res.status(500).json({message:"Delete failed"});
+    const result = await pool.query("DELETE FROM posts WHERE id=$1 AND email=$2", [id, email]);
+    if (result.rowCount === 0) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Post deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Delete failed" });
   }
 });
 
-// Update all posts of a user
-app.put("/edituserposts/:email", async (req,res)=>{
-  try{
-    const { email } = req.params;
-    const { username,avatar } = req.body;
-    if(!username || !avatar) return res.status(400).json({message:"Missing data"});
-    const pool = getUserPool(email);
-    const result = await pool.query("UPDATE posts SET username=$1, avatar=$2 WHERE email=$3 RETURNING *",[username,avatar,email]);
-    if(result.rowCount===0) return res.status(404).json({message:"No posts found"});
-    res.json({message:`All posts of ${email} updated`, updatedPosts: result.rows});
-  }catch(err){
-    console.error(err);
-    res.status(500).json({message:"Failed to update posts"});
-  }
-});
-
-// Delete all posts of a user
-app.delete("/deleteuserposts/:email", async (req,res)=>{
-  try{
-    const { email } = req.params;
-    if(!email) return res.status(400).json({message:"Email required"});
-    const pool = getUserPool(email);
-    const result = await pool.query("DELETE FROM posts WHERE email=$1",[email]);
-    res.json({message:"All user posts deleted", deletedCount: result.rowCount});
-  }catch(err){
-    console.error(err);
-    res.status(500).json({message:"Failed to delete user posts"});
-  }
-});
-
-/* ============ FETCH ==============*/
-app.get("/get/:name", (req,res) => {
-    const name = req.params.name;
-    const message = `${name} server has been pinged`;
-    res.send(message);
+/* ============ PING ROUTE ==============*/
+app.get("/get/:name", (req, res) => {
+    res.send(`${req.params.name} server has been pinged`);
 });
 
 // 🔹 Start server
-const PORT = process.env.PORT||5000;
-(async()=>{
+const PORT = process.env.PORT || 5000;
+(async () => {
   await initDB();
-  app.listen(PORT,()=>console.log(`✅ Server running on port ${PORT}`));
+  pingAllPools();
+  app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
 })();
