@@ -118,6 +118,14 @@ app.put("/changeAllProf", async (req, res) => {
   try {
     const { email, username, bio, avatar, cover_photo } = req.body; 
 
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    // ইমেইল দিয়ে সঠিক পুল বা ডাটাবেজ কানেকশন বের করা (আপনার প্রজেক্টের getUserPool ফাংশন অনুযায়ী)
+    const pool = getUserPool(email);
+
+    // ১. posts টেবিলে আপডেট
     const postUpdateResult = await pool.query(
       `
       UPDATE posts
@@ -128,6 +136,7 @@ app.put("/changeAllProf", async (req, res) => {
       [username, avatar, email]
     );
 
+    // ২. users_vibe টেবিলে আপডেট
     const vibeUpdateResult = await pool.query(
       `
       UPDATE users_vibe
@@ -146,8 +155,8 @@ app.put("/changeAllProf", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error updating profile in target server:", err);
-    res.status(500).json({ message: "Server error while updating profile data" });
+    console.error("Error updating profile in target server:", err.message);
+    res.status(500).json({ success: false, message: "Server error while updating profile data" });
   }
 });
 
