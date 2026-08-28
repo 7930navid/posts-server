@@ -250,7 +250,7 @@ app.post("/post", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("💥 DB INSERT ERROR:", err.message);
+    console.error("DB INSERT ERROR:", err.message);
     res.status(500).json({ message: err.message });
   }
 });
@@ -283,7 +283,7 @@ app.get("/post", async (req, res) => {
     res.json(posts);
 
   } catch (err) {
-    console.error("💥 FETCH ERROR:", err.message);
+    console.error("FETCH ERROR:", err.message);
     res.status(500).json({ message: "Error fetching posts" });
   }
 });
@@ -301,11 +301,14 @@ app.get("/postOfAnUser/:email", async (req, res) => {
   }
 });
 
+
 // Edit Post
 app.put("/post/:email/:id", async (req, res) => {
   try {
     const { email, id } = req.params;
     const { post, feelings, location, others } = req.body;
+
+			if (!email || !id) return console.error('Email and Id both required');
 
     let parsedOthers = others;
     if (typeof others === "string") {
@@ -313,6 +316,7 @@ app.put("/post/:email/:id", async (req, res) => {
         parsedOthers = JSON.parse(others);
       } catch (e) {
         parsedOthers = [];
+        console.error(e);
       }
     }
 
@@ -328,7 +332,7 @@ app.put("/post/:email/:id", async (req, res) => {
 
     const result = await pool.query(
       `UPDATE posts 
-       SET post = $1, feelings = $2, location = $3, others = $4::jsonb 
+       SET post = $1::jsonb, feelings = $2, location = $3, others = $4::jsonb 
        WHERE id = $5 AND email = $6 
        RETURNING *`,
       [
@@ -351,7 +355,7 @@ app.put("/post/:email/:id", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("💥 DB UPDATE ERROR:", err.message);
+    console.error("DB UPDATE ERROR:", err.message);
     res.status(500).json({ message: err.message });
   }
 });
