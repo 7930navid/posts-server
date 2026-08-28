@@ -305,13 +305,54 @@ app.get("/postOfAnUser/:email", async (req, res) => {
 app.put("/post/:email/:id", async (req, res) => {
   try {
     const { email, id } = req.params;
-    const { post } = req.body;
+    const { post, feelings, location, others } = req.body;
+
+    let parsedOthers = others;
+    if (typeof others === "string") {
+      try {
+        parsedOthers = JSON.parse(others);
+      } catch (e) {
+        parsedOthers = [];
+      }
+    }
+
+    const safeOthers = Array.isArray(parsedOthers)
+      ? parsedOthers.map((o) => ({
+          email: String(o?.email || ""),
+          name: String(o?.name || ""),
+          avatar: String(o?.avatar || ""),
+        }))
+      : [];
+
     const pool = getUserPool(email);
-    const result = await pool.query("UPDATE posts SET post=$1 WHERE id=$2 AND email=$3 RETURNING *", [post, id, email]);
-    if (result.rowCount === 0) return res.status(404).json({ message: "Not found" });
-    res.json({ message: "Post updated", post: result.rows[0] });
+
+    const result = await pool.query(
+      `UPDATE posts 
+       SET post = $1, feelings = $2, location = $3, others = $4::jsonb 
+       WHERE id = $5 AND email = $6 
+       RETURNING *`,
+      [
+        post,
+        feelings || null,
+        location || null,
+        JSON.stringify(safeOthers),
+        id,
+        email
+      ]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    res.json({
+      message: "Post updated successfully",
+      post: result.rows[0],
+    });
+
   } catch (err) {
-    res.status(500).json({ message: "Update failed" });
+    console.error("💥 DB UPDATE ERROR:", err.message);
+    res.status(500).json({ message: err.message });
   }
 });
 
