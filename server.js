@@ -209,7 +209,7 @@ app.post("/post", async (req, res) => {
   try {
     const { user, post, avatar, feelings, location, others, from } = req.body;
 
-			let origin = from || 'id';
+    const origin = from || 'id';
 
     let parsedOthers = others;
     if (typeof others === "string") {
@@ -232,7 +232,7 @@ app.post("/post", async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO posts
-      (username, email, avatar, post, feelings, location, others, from)
+      (username, email, avatar, post, feelings, location, others, "from")
       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
       RETURNING *`,
       [
@@ -243,7 +243,7 @@ app.post("/post", async (req, res) => {
         feelings || null,
         location || null,
         JSON.stringify(safeOthers),
-							origin
+        origin
       ]
     );
 
