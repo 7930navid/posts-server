@@ -207,7 +207,9 @@ app.get('/api/get-vibes', async (req, res) => {
 /* === 3. CREATE POST ROUTE === */
 app.post("/post", async (req, res) => {
   try {
-    const { user, post, avatar, feelings, location, others } = req.body;
+    const { user, post, avatar, feelings, location, others, from } = req.body;
+
+			let origin = from || 'id';
 
     let parsedOthers = others;
     if (typeof others === "string") {
@@ -230,8 +232,8 @@ app.post("/post", async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO posts
-      (username, email, avatar, post, feelings, location, others)
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      (username, email, avatar, post, feelings, location, others, from)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
       RETURNING *`,
       [
         user?.username,
@@ -240,7 +242,8 @@ app.post("/post", async (req, res) => {
         post,
         feelings || null,
         location || null,
-        JSON.stringify(safeOthers)
+        JSON.stringify(safeOthers),
+							origin
       ]
     );
 
